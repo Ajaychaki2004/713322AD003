@@ -6,69 +6,60 @@ from rest_framework.decorators import api_view
 from rest_framework import status
 
 BASE_URL = "http://20.244.56.144/test"
-AUTH_TOKEN = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiZXhwIjoxNzQzMTU1NTcwLCJpYXQiOjE3NDMxNTUyNzAsImlzcyI6IkFmZm9yZG1lZCIsImp0aSI6IjNmNmJmMTJmLWQzY2QtNDcyZi1hMmNlLWQ4OGM2NmIwNGQ1OCIsInN1YiI6InNhamF5Y2hha3JhdmFydGhpMjAwNEBnbWFpbC5jb20ifSwiY29tcGFueU5hbWUiOiJTTlNDRSIsImNsaWVudElEIjoiM2Y2YmYxMmYtZDNjZC00NzJmLWEyY2UtZDg4YzY2YjA0ZDU4IiwiY2xpZW50U2VjcmV0IjoiUllnS095T1pXRGFjZWluRyIsIm93bmVyTmFtZSI6IkFqYXkgQ2hha3JhdmFydGhpIiwib3duZXJFbWFpbCI6InNhamF5Y2hha3JhdmFydGhpMjAwNEBnbWFpbC5jb20iLCJyb2xsTm8iOiI3MTMzMjJBRDAwMyJ9.pMp9ni0ayj5ThvH8WLkw7zl-hcNJGLNRRNFEzFz21Oc"
+AUTH_TOKEN = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJNYXBDbGFpbXMiOnsiZXhwIjoxNzQzMTU3MzU3LCJpYXQiOjE3NDMxNTcwNTcsImlzcyI6IkFmZm9yZG1lZCIsImp0aSI6IjNmNmJmMTJmLWQzY2QtNDcyZi1hMmNlLWQ4OGM2NmIwNGQ1OCIsInN1YiI6InNhamF5Y2hha3JhdmFydGhpMjAwNEBnbWFpbC5jb20ifSwiY29tcGFueU5hbWUiOiJTTlNDRSIsImNsaWVudElEIjoiM2Y2YmYxMmYtZDNjZC00NzJmLWEyY2UtZDg4YzY2YjA0ZDU4IiwiY2xpZW50U2VjcmV0IjoiUllnS095T1pXRGFjZWluRyIsIm93bmVyTmFtZSI6IkFqYXkgQ2hha3JhdmFydGhpIiwib3duZXJFbWFpbCI6InNhamF5Y2hha3JhdmFydGhpMjAwNEBnbWFpbC5jb20iLCJyb2xsTm8iOiI3MTMzMjJBRDAwMyJ9.KZ7wBEXMuEIgJ8gh__FIUN68VGrskAEy11iUW1oNqco"
 
-@api_view(['GET'])
-def get_posts(request):
-    post_type = request.GET.get('type')
-
-    if post_type not in ['popular', 'latest']:
-        return Response(
-            {"error": "Invalid query param. Use type=popular or type=latest"},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
-    try:
-        headers = {
+def fetch_users():
+    headers = {
         "Authorization": AUTH_TOKEN
     }
-        users_response = requests.get("http://20.244.56.144/test/users", headers=headers)
-        users_data = users_response.json()
-        print("Users API Response:", users_data)
+    response = requests.get(f"{BASE_URL}/users", headers=headers)
+    response.raise_for_status()
+    return response.json().get("users", {})
 
-        users = users_data.get("users", {})
-        print("Extracted Users:", users)
+def fetch_user_posts(user_id, user_name):
+    headers = {
+        "Authorization": AUTH_TOKEN
+    }
+    response = requests.get(f"{BASE_URL}/users/{user_id}/posts", headers=headers)
+    response.raise_for_status()
+    posts = response.json().get("posts", [])
+    for post in posts:
+        post["user_id"] = user_id
+        post["user_name"] = user_name
+        post["comment_count"] = fetch_comment_count(post.get("id"))
 
-        all_posts = []
+def fetch_comment_count(post_id):
+    headers = {
+        "Authorization": AUTH_TOKEN
+    }
+    response = requests.get(f"{BASE_URL}/posts/{post_id}/comments", headers=headers)
+    response.raise_for_status()
+    return len(response.json().get("comments", []))
 
-        # Step 2: For each user, get their posts
-        for user_id, user_name in users.items():
-            posts_url = f"http://20.244.56.144/test/users/{user_id}/posts"
-            posts_response = requests.get(posts_url, headers=headers)
-            posts_data = posts_response.json()
-            posts = posts_data.get("posts", [])
+def fetch_all_posts():
+    
+    users = fetch_users()
+    all_posts = []
+    for user_id, user_name in users.items():
+        all_posts.extend(fetch_user_posts(user_id, user_name))
+    return all_posts
 
-            print(f"{user_name} (ID: {user_id}) has {len(posts)} posts")
-
-            for post in posts:
-                post["user_id"] = user_id
-                post["user_name"] = user_name
-
-                post_id = post.get("id")
-                comments_url = f"http://20.244.56.144/test/posts/{post_id}/comments"
-                comments_response = requests.get(comments_url, headers=headers)
-                comments_data = comments_response.json()
-                comments = comments_data.get("comments", [])
-
-                print(f"Post ID {post_id} → {len(comments)} comments")
-
-                post["comment_count"] = len(comments)
-                all_posts.append(post)
-
-
-        # Step 4: Sort & Slice
-        if post_type == "popular":
-            sorted_posts = sorted(all_posts, key=lambda x: x["comment_count"], reverse=True)
-        else: 
-            sorted_posts = sorted(all_posts, key=lambda x: x["id"], reverse=True)
-
-        top_posts = sorted_posts[:5]
-
-
-        return Response(top_posts, status=status.HTTP_200_OK)
-
+@api_view(['GET'])
+def get_popular_posts(request):
+    try:
+        all_posts = fetch_all_posts()
+        sorted_posts = sorted(all_posts, key=lambda x: x["comment_count"], reverse=True)[:5]
+        return Response(sorted_posts, status=status.HTTP_200_OK)
     except Exception as e:
-        print("Error occurred:", str(e))
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def get_latest_posts(request):
+    try:
+        all_posts = fetch_all_posts()
+        sorted_posts = sorted(all_posts, key=lambda x: x["id"], reverse=True)[:5]
+        return Response(sorted_posts, status=status.HTTP_200_OK)
+    except Exception as e:
         return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])

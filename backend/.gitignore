@@ -1,0 +1,6 @@
+Backend gitignore:
+
+*.pyc
+_pycache_/
+migrations/
+venv
